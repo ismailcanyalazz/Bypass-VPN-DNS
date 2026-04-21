@@ -1,0 +1,24 @@
+{
+  "name": "bypass-dns",
+  "version": "1.0.0",
+  "description": "🛡️ BypassDNS - DNS-over-HTTPS Proxy & DPI Bypass Aracı",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "dns",
+    "doh",
+    "proxy",
+    "dpi",
+    "bypass"
+  ],
+  "author": "BypassDNS",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dns2": "^2.1.0",
+    "express": "^4.21.0"
+  }
+}

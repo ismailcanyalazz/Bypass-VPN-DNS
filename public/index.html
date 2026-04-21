@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BypassDNS - Devils </title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="background">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+
+    <div class="container">
+        <header>
+            <div class="logo">
+                <i class="fa-solid fa-shield-halved"></i>
+                <h1>Bypass<span>DNS</span> </h1>
+            </div>
+            <div class="header-status">
+                <span id="vpn-status-badge" class="badge danger"><i class="fa-solid fa-circle-xmark"></i> Bağlı
+                    Değil</span>
+            </div>
+        </header>
+
+        <main>
+            <!-- Kontrol Paneli Kartı -->
+            <section class="card control-panel" style="text-align: center; padding: 4rem 2rem;">
+                <h2 style="justify-content: center; font-size: 1.5rem; margin-bottom: 2rem;"><i
+                        class="fa-solid fa-earth-americas"></i> Gelişmiş Bypass'ı Aktif et!</h2>
+
+                <div class="status-info" style="margin-bottom: 2rem;">
+                    <p class="label">Tünel Durumu</p>
+                    <h3 id="vpn-message">Sistem Hazır.</h3>
+                </div>
+
+                <div class="buttons" style="justify-content: center;">
+                    <button id="btn-start" class="btn primary" style="font-size: 1.2rem; padding: 1rem 3rem;"><i
+                            class="fa-solid fa-power-off"></i> VPN'e Bağlan</button>
+                    <button id="btn-stop" class="btn secondary outline hidden"
+                        style="font-size: 1.2rem; padding: 1rem 3rem;"><i class="fa-solid fa-rotate-left"></i>
+                        Bağlantıyı Kes</button>
+                </div>
+            </section>
+
+            <!-- İstatistik Kartı -->
+            <section class="card stats-panel">
+                <h2><i class="fa-solid fa-chart-pie"></i> İstatistikler</h2>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <i class="fa-solid fa-clock"></i>
+                        <div class="stat-details">
+                            <span class="stat-label">Çalışma Süresi</span>
+                            <span id="stat-uptime" class="stat-value">00:00:00</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>BypassDNS Powered By Ismail Can Yalaz</p>
+        </footer>
+    </div>
+
+    <!-- Bildirim Toast -->
+    <div id="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
