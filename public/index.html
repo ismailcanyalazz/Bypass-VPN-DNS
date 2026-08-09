@@ -1,77 +1,281 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="tr">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BypassDNS - Devils </title>
+    <title>BypassDNS - Devils Dashboard</title>
+    <meta name="description" content="DNS-over-HTTPS Proxy ve DPI Bypass kontrol paneli">
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
-
 <body>
     <div class="background">
         <div class="blob blob-1"></div>
         <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+        <div class="grid-overlay"></div>
     </div>
 
     <div class="container">
+        <!-- Header -->
         <header>
             <div class="logo">
                 <i class="fa-solid fa-shield-halved"></i>
-                <h1>Bypass<span>DNS</span> </h1>
+                <div>
+                    <h1>Bypass<span>DNS</span></h1>
+                    <span class="version-tag">v2.0 Devils</span>
+                </div>
             </div>
-            <div class="header-status">
-                <span id="vpn-status-badge" class="badge danger"><i class="fa-solid fa-circle-xmark"></i> Bağlı
-                    Değil</span>
+            <div class="header-right">
+                <div id="connection-indicator" class="conn-indicator offline">
+                    <span class="conn-dot"></span>
+                    <span id="conn-text">Korumasız</span>
+                </div>
+                <div class="header-ip" id="header-ip" style="display:none">
+                    <i class="fa-solid fa-location-dot"></i>
+                    <span id="vpn-ip-display">--</span>
+                </div>
             </div>
         </header>
 
-        <main>
-            <!-- Kontrol Paneli Kartı -->
-            <section class="card control-panel" style="text-align: center; padding: 4rem 2rem;">
-                <h2 style="justify-content: center; font-size: 1.5rem; margin-bottom: 2rem;"><i
-                        class="fa-solid fa-earth-americas"></i> Gelişmiş Bypass'ı Aktif et!</h2>
-
-                <div class="status-info" style="margin-bottom: 2rem;">
-                    <p class="label">Tünel Durumu</p>
-                    <h3 id="vpn-message">Sistem Hazır.</h3>
+        <!-- Ana Kontrol - Güç Butonu -->
+        <section class="card power-card">
+            <div class="power-layout">
+                <div class="power-button-area">
+                    <div class="power-ring-outer" id="power-ring-outer">
+                        <div class="power-ring-middle">
+                            <div class="power-ring-inner">
+                                <button id="btn-power" class="power-btn" title="Bypass Başlat/Durdur">
+                                    <i class="fa-solid fa-power-off"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="power-label">
+                        <p class="power-status-label">DURUM</p>
+                        <h2 id="power-status-text">Korumasız</h2>
+                        <p id="power-status-sub" class="power-sub">Başlatmak için butona bas</p>
+                    </div>
                 </div>
 
-                <div class="buttons" style="justify-content: center;">
-                    <button id="btn-start" class="btn primary" style="font-size: 1.2rem; padding: 1rem 3rem;"><i
-                            class="fa-solid fa-power-off"></i> VPN'e Bağlan</button>
-                    <button id="btn-stop" class="btn secondary outline hidden"
-                        style="font-size: 1.2rem; padding: 1rem 3rem;"><i class="fa-solid fa-rotate-left"></i>
-                        Bağlantıyı Kes</button>
-                </div>
-            </section>
+                <div class="control-right">
+                    <!-- DPI Modu Seçimi -->
+                    <div class="control-group">
+                        <label class="control-label"><i class="fa-solid fa-sliders"></i> DPI Bypass Modu</label>
+                        <div class="mode-buttons" id="dpi-mode-buttons">
+                            <button class="mode-btn active" data-mode="-1" title="Hafif: Sadece TLS parçalama">Hafif</button>
+                            <button class="mode-btn" data-mode="-2" title="Orta: TLS + HTTP bölme">Orta</button>
+                            <button class="mode-btn" data-mode="-5" title="Agresif: Tam bypass (önerilen)">Agresif</button>
+                        </div>
+                    </div>
 
-            <!-- İstatistik Kartı -->
-            <section class="card stats-panel">
-                <h2><i class="fa-solid fa-chart-pie"></i> İstatistikler</h2>
-                <div class="stats-grid">
-                    <div class="stat-box">
-                        <i class="fa-solid fa-clock"></i>
-                        <div class="stat-details">
-                            <span class="stat-label">Çalışma Süresi</span>
-                            <span id="stat-uptime" class="stat-value">00:00:00</span>
+                    <!-- DoH Sağlayıcı -->
+                    <div class="control-group">
+                        <label class="control-label"><i class="fa-solid fa-server"></i> DNS Sağlayıcı</label>
+                        <div class="select-wrapper">
+                            <select id="doh-provider">
+                                <option value="cloudflare">⚡ Cloudflare (1.1.1.1) — Hızlı</option>
+                                <option value="google">🌐 Google (8.8.8.8) — Güvenilir</option>
+                                <option value="quad9">🔒 Quad9 (9.9.9.9) — Güvenli</option>
+                                <option value="adguard">🛡️ AdGuard — Reklam Engelleyici</option>
+                            </select>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </div>
+                    </div>
+
+                    <!-- VPN Butonu -->
+                    <div class="control-group">
+                        <label class="control-label"><i class="fa-solid fa-lock"></i> WireGuard VPN (Ekstra Gizlilik)</label>
+                        <div class="vpn-controls">
+                            <button id="btn-vpn-start" class="btn secondary outline sm"><i class="fa-solid fa-circle-play"></i> VPN Bağlan</button>
+                            <button id="btn-vpn-stop" class="btn danger outline sm hidden"><i class="fa-solid fa-circle-stop"></i> VPN Kes</button>
                         </div>
                     </div>
                 </div>
-            </section>
-        </main>
+            </div>
+        </section>
+
+        <!-- İstatistik Kartları -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-icon uptime-icon"><i class="fa-solid fa-clock"></i></div>
+                <div class="stat-info">
+                    <span class="stat-label">Çalışma Süresi</span>
+                    <span id="stat-uptime" class="stat-value mono">00:00:00</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon queries-icon"><i class="fa-solid fa-magnifying-glass"></i></div>
+                <div class="stat-info">
+                    <span class="stat-label">DNS Sorguları</span>
+                    <span id="stat-queries" class="stat-value">0</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon cache-icon"><i class="fa-solid fa-bolt"></i></div>
+                <div class="stat-info">
+                    <span class="stat-label">Önbellekten</span>
+                    <span id="stat-cached" class="stat-value">0</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon ping-icon"><i class="fa-solid fa-signal"></i></div>
+                <div class="stat-info">
+                    <span class="stat-label">Gecikme (ms)</span>
+                    <span id="stat-ping" class="stat-value mono">--</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon blocked-icon"><i class="fa-solid fa-ban"></i></div>
+                <div class="stat-info">
+                    <span class="stat-label">Engel Aşıldı</span>
+                    <span id="stat-blocked" class="stat-value">0</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon failed-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                <div class="stat-info">
+                    <span class="stat-label">Başarısız</span>
+                    <span id="stat-failed" class="stat-value">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sistem Durumu Kartları -->
+        <div class="status-row">
+            <!-- DPI Durumu -->
+            <div class="card status-card">
+                <div class="status-card-header">
+                    <div class="status-card-title">
+                        <i class="fa-solid fa-filter-circle-xmark"></i>
+                        <span>DPI Bypass</span>
+                    </div>
+                    <span id="dpi-badge" class="badge danger"><i class="fa-solid fa-circle-xmark"></i> Kapalı</span>
+                </div>
+                <p class="status-card-desc" id="dpi-desc">DPI engeli atlatma motoru hazır.</p>
+                <div class="status-detail" id="dpi-detail" style="display:none">
+                    <span class="detail-item"><i class="fa-solid fa-code"></i> Mod: <strong id="dpi-mode-display">-5</strong></span>
+                    <span class="detail-item"><i class="fa-solid fa-clock"></i> Süre: <strong id="dpi-uptime">--</strong></span>
+                </div>
+            </div>
+
+            <!-- DNS Proxy Durumu -->
+            <div class="card status-card">
+                <div class="status-card-header">
+                    <div class="status-card-title">
+                        <i class="fa-solid fa-network-wired"></i>
+                        <span>DNS Proxy</span>
+                    </div>
+                    <span id="dns-badge" class="badge danger"><i class="fa-solid fa-circle-xmark"></i> Kapalı</span>
+                </div>
+                <p class="status-card-desc" id="dns-desc">DNS-over-HTTPS proxy hazır.</p>
+                <div class="status-detail" id="dns-detail" style="display:none">
+                    <span class="detail-item"><i class="fa-solid fa-server"></i> Port: <strong>53 (UDP)</strong></span>
+                    <span class="detail-item"><i class="fa-solid fa-shield"></i> Sağlayıcı: <strong id="dns-provider-display">Cloudflare</strong></span>
+                </div>
+            </div>
+
+            <!-- VPN Durumu -->
+            <div class="card status-card">
+                <div class="status-card-header">
+                    <div class="status-card-title">
+                        <i class="fa-brands fa-cloudflare"></i>
+                        <span>WireGuard VPN</span>
+                    </div>
+                    <span id="vpn-badge" class="badge warning"><i class="fa-solid fa-triangle-exclamation"></i> Kapalı</span>
+                </div>
+                <p class="status-card-desc" id="vpn-desc">Cloudflare WARP tüneli hazır.</p>
+                <div class="status-detail" id="vpn-detail" style="display:none">
+                    <span class="detail-item"><i class="fa-solid fa-location-dot"></i> IP: <strong id="vpn-ip-detail">--</strong></span>
+                    <span class="detail-item"><i class="fa-solid fa-clock"></i> Süre: <strong id="vpn-uptime">--</strong></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- DNS Sorgu Testi + Canlı Log -->
+        <div class="logs-row">
+            <!-- DNS Test -->
+            <div class="card dns-test-card">
+                <div class="card-header-row">
+                    <h3><i class="fa-solid fa-flask"></i> DNS Çözümleme Testi</h3>
+                </div>
+                <div class="dns-test-form">
+                    <input type="text" id="test-domain" placeholder="örn: discord.com" class="dns-input" />
+                    <select id="test-type" class="dns-type-select">
+                        <option value="A">A</option>
+                        <option value="AAAA">AAAA</option>
+                        <option value="MX">MX</option>
+                        <option value="TXT">TXT</option>
+                    </select>
+                    <button id="btn-dns-test" class="btn primary sm"><i class="fa-solid fa-play"></i> Test Et</button>
+                </div>
+                <div id="dns-test-result" class="dns-result hidden"></div>
+            </div>
+
+            <!-- Sistem Bilgisi -->
+            <div class="card sys-card">
+                <div class="card-header-row">
+                    <h3><i class="fa-solid fa-microchip"></i> Sistem</h3>
+                </div>
+                <div class="sys-info-grid">
+                    <div class="sys-item">
+                        <span class="sys-label">Platform</span>
+                        <span id="sys-platform" class="sys-value">--</span>
+                    </div>
+                    <div class="sys-item">
+                        <span class="sys-label">Node.js</span>
+                        <span id="sys-node" class="sys-value">--</span>
+                    </div>
+                    <div class="sys-item">
+                        <span class="sys-label">Bellek (RSS)</span>
+                        <span id="sys-mem" class="sys-value">--</span>
+                    </div>
+                    <div class="sys-item">
+                        <span class="sys-label">Sunucu Uptime</span>
+                        <span id="sys-uptime" class="sys-value mono">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Canlı DNS Log Tablosu -->
+        <section class="card log-card">
+            <div class="card-header-row">
+                <h3><i class="fa-solid fa-list-ul"></i> Canlı DNS Sorgu Logu <span id="live-indicator" class="live-badge"><span class="live-dot"></span>CANLI</span></h3>
+                <button id="btn-clear-logs" class="btn icon-btn" title="Logları Temizle"><i class="fa-solid fa-trash-can"></i></button>
+            </div>
+            <div class="table-container">
+                <table id="log-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Domain</th>
+                            <th>Tip</th>
+                            <th>Yanıt Süresi</th>
+                            <th>Sağlayıcı</th>
+                            <th>Durum</th>
+                        </tr>
+                    </thead>
+                    <tbody id="log-tbody">
+                        <tr class="empty-row">
+                            <td colspan="6">
+                                <i class="fa-solid fa-satellite-dish"></i>
+                                <span>DNS Proxy başlatıldığında sorgular burada görünecek...</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
 
         <footer>
-            <p>BypassDNS Powered By Ismail Can Yalaz</p>
+            <p>BypassDNS <strong>v2.0</strong> — Powered by <strong>Ismail Can Yalaz</strong> &nbsp;|&nbsp; <span id="footer-status">Hazır</span></p>
         </footer>
     </div>
 
-    <!-- Bildirim Toast -->
     <div id="toast-container"></div>
 
     <script src="app.js"></script>
 </body>
-
 </html>

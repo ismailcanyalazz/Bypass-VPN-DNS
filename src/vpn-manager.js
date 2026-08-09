@@ -1,12 +1,13 @@
-/**
- * VPN Manager
- * WireGuard ve Cloudflare WARP (wgcf) süreçlerini otomatik yönetir.
+﻿/**
+ * VPN Manager v2 - WireGuard WARP
+ * Gelismis hata yakalama ve admin kontrol
  */
-const { exec, spawn } = require('child_process');
+const { exec, execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const util = require('util');
 const execAsync = util.promisify(exec);
+const execFileAsync = util.promisify(execFile);
 
 class VpnManager {
   constructor(logger) {
@@ -16,175 +17,198 @@ class VpnManager {
     this.installerExe = path.join(this.vpnDir, 'wireguard-installer.exe');
     this.wgExe = 'C:\\Program Files\\WireGuard\\wireguard.exe';
     this.confPath = path.join(this.vpnDir, 'warp.conf');
-    
+
     this.isRunning = false;
     this.startTime = null;
     this.statusMessage = 'Bekleniyor...';
   }
 
-  /**
-   * WireGuard kurulu mu kontrol et
-   */
   isWireGuardInstalled() {
     return fs.existsSync(this.wgExe);
   }
 
   /**
-   * WireGuard'ı sessizce kur
+   * Yonetici yetkisi var mi kontrol et
+   */
+  async isAdmin() {
+    try {
+      const { stdout } = await execAsync('net session', { windowsHide: true });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * WireGuard kur
    */
   async installWireGuard() {
-    this.statusMessage = 'WireGuard kuruluyor... Lütfen bekleyin.';
-    console.log(this.statusMessage);
-    
+    this.statusMessage = 'WireGuard kuruluyor...';
     if (!fs.existsSync(this.installerExe)) {
-      throw new Error('wireguard-installer.exe bulunamadı! İndirme başarısız olmuş olabilir.');
+      throw new Error('wireguard-installer.exe bulunamadi!');
     }
-
     try {
-      // Yükleyiciyi sessiz argümanlarla çalıştır (/S)
-      await execAsync(`"${this.installerExe}" /S`, { windowsHide: true });
-      
-      // Kurulumun tamamlanmasını bekle (max 30 saniye)
+      await execFileAsync(this.installerExe, ['/S'], { windowsHide: true, timeout: 60000 });
       for (let i = 0; i < 30; i++) {
         if (this.isWireGuardInstalled()) {
-          console.log('✅ WireGuard başarıyla kuruldu!');
+          console.log('WireGuard kuruldu.');
           return;
         }
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(r => setTimeout(r, 1000));
       }
-      
-      throw new Error('Kurulum zaman aşımına uğradı.');
+      throw new Error('Kurulum zaman asimina ugradi.');
     } catch (error) {
-      throw new Error(`WireGuard kurulumu başarısız: ${error.message}. Lütfen manuel olarak kurun.`);
+      throw new Error(`WireGuard kurulumu basarisiz: ${error.message}`);
     }
   }
 
   /**
-   * wgcf ile Cloudflare WARP profili oluştur
+   * WARP profili olustur
    */
   async generateWarpProfile() {
-    this.statusMessage = 'Cloudflare WARP profili kontrol ediliyor...';
-    
+    this.statusMessage = 'WARP profili kontrol ediliyor...';
     if (fs.existsSync(this.confPath)) {
-      console.log('✅ WARP profili zaten var.');
+      console.log('WARP profili mevcut.');
       return;
     }
-
-    this.statusMessage = 'Ücretsiz Cloudflare WARP hesabı oluşturuluyor...';
-    console.log(this.statusMessage);
-
+    this.statusMessage = 'Cloudflare WARP hesabi olusturuluyor...';
     try {
-      // 1. Hesap oluştur (register)
-      await execAsync(`"${this.wgcfExe}" register --accept-tos`, { cwd: this.vpnDir, windowsHide: true });
-      
-      this.statusMessage = 'VPN profili oluşturuluyor...';
-      
-      // 2. Profil oluştur (generate)
-      await execAsync(`"${this.wgcfExe}" generate`, { cwd: this.vpnDir, windowsHide: true });
-      
-      // 3. Dosyayı warp.conf olarak yeniden adlandır
-      const generatedConf = path.join(this.vpnDir, 'wgcf-profile.conf');
-      if (fs.existsSync(generatedConf)) {
-        fs.renameSync(generatedConf, this.confPath);
-        console.log('✅ WARP profili başarıyla oluşturuldu!');
+      await execFileAsync(this.wgcfExe, ['register', '--accept-tos'], { cwd: this.vpnDir, windowsHide: true, timeout: 30000 });
+      this.statusMessage = 'VPN profili olusturuluyor...';
+      await execFileAsync(this.wgcfExe, ['generate'], { cwd: this.vpnDir, windowsHide: true, timeout: 30000 });
+      const generated = path.join(this.vpnDir, 'wgcf-profile.conf');
+      if (fs.existsSync(generated)) {
+        fs.renameSync(generated, this.confPath);
+        console.log('WARP profili olusturuldu.');
       } else {
-        throw new Error('wgcf profil dosyasını oluşturamadı.');
+        throw new Error('wgcf profil dosyasi olusturulamadi.');
       }
     } catch (error) {
-      throw new Error(`WARP profili oluşturulamadı: ${error.message}`);
+      throw new Error(`WARP profili olusturulamadi: ${error.message}`);
     }
   }
 
   /**
-   * Tünelin çalışıp çalışmadığını Windows Servislerinden kontrol et
+   * Tunel servisi durumunu kontrol et (PowerShell ile)
    */
   async checkTunnelStatus() {
     try {
-      const { stdout } = await execAsync('sc query WireGuardTunnel$warp');
-      return stdout.includes('RUNNING');
-    } catch (error) {
-      return false; // Servis yok veya hata verdi
+      const { stdout } = await execAsync(
+        'powershell -NonInteractive -Command "Get-Service -Name \'WireGuardTunnel$warp\' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Status"',
+        { windowsHide: true, timeout: 5000 }
+      );
+      return stdout.trim() === 'Running';
+    } catch (e) {
+      return false;
     }
   }
 
   /**
-   * VPN'i Başlat
+   * VPN Baslat
    */
   async start() {
     if (this.isRunning) {
-      return { success: true, message: 'VPN zaten çalışıyor.' };
+      return { success: true, message: 'VPN zaten calisiyor.' };
+    }
+
+    // Admin kontrol
+    const admin = await this.isAdmin();
+    if (!admin) {
+      this.statusMessage = 'Yonetici yetkisi gerekli';
+      throw new Error(
+        'VPN baslatmak icin uygulamanin Yonetici olarak calistirilmasi gerekiyor.\n' +
+        'Lutfen terminali "Yonetici olarak calistir" ile acip tekrar deneyin.'
+      );
     }
 
     try {
-      // 1. WireGuard yüklü değilse yükle
       if (!this.isWireGuardInstalled()) {
         await this.installWireGuard();
       }
-
-      // 2. WARP Profili yoksa oluştur
       await this.generateWarpProfile();
 
-      this.statusMessage = 'VPN Tüneli açılıyor...';
+      this.statusMessage = 'VPN tuneli aciliyor...';
       console.log(this.statusMessage);
 
-      // 3. Tüneli başlat (/installtunnelservice ile başlar)
+      // Once varsa kapat
       try {
-        await execAsync(`"${this.wgExe}" /installtunnelservice "${this.confPath}"`, { windowsHide: true });
-      } catch (err) {
-        // Eğer zaten kuruluysa hata verebilir, yoksay
+        await execFileAsync(this.wgExe, ['/uninstalltunnelservice', 'warp'], { windowsHide: true, timeout: 8000 });
+        await new Promise(r => setTimeout(r, 1500));
+      } catch (e) { /* zaten kapali */ }
+
+      // Yeni tunel yukle
+      const { stdout: installOut, stderr: installErr } = await execAsync(
+        `"${this.wgExe}" /installtunnelservice "${this.confPath}"`,
+        { windowsHide: true, timeout: 15000 }
+      );
+
+      if (installErr && installErr.toLowerCase().includes('error')) {
+        throw new Error(`WireGuard hatasi: ${installErr.trim()}`);
       }
 
-      // 4. Durumu doğrula
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      const active = await this.checkTunnelStatus();
+      // Servisin baslamasini bekle (maks 10 sn)
+      let active = false;
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        active = await this.checkTunnelStatus();
+        if (active) break;
+      }
 
       if (active) {
         this.isRunning = true;
         this.startTime = Date.now();
-        this.statusMessage = 'Bağlandı';
-        console.log('🚀 VPN Tüneli Aktif! Tüm trafik Cloudflare üzerinden geçiyor.');
-        return { success: true, message: 'VPN başarıyla bağlandı!' };
+        this.statusMessage = 'Baglandi';
+        console.log('VPN Tuneli Aktif!');
+        return { success: true, message: 'VPN basariyla baglandi! Tum trafik Cloudflare uzerinden gecyor.' };
       } else {
-        throw new Error('WireGuard servisi başlatılamadı.');
+        // Son caret: olay gunlugunu oku
+        let evtMsg = '';
+        try {
+          const { stdout } = await execAsync(
+            'powershell -NonInteractive -Command "Get-WinEvent -LogName System -MaxEvents 5 | Where-Object { $_.Message -like \'*WireGuard*\' } | Select-Object -First 1 -ExpandProperty Message"',
+            { windowsHide: true, timeout: 5000 }
+          );
+          evtMsg = stdout.trim();
+        } catch (e) {}
+        throw new Error(
+          'WireGuard servisi baslatilmadı.' +
+          (evtMsg ? `\nOlay Gunlugu: ${evtMsg.substring(0, 120)}` : ' Tam yetkiyle calistirdiginizdan emin olun.')
+        );
       }
 
     } catch (error) {
       this.statusMessage = 'Hata';
-      console.error('❌ VPN Başlatma Hatası:', error.message);
+      console.error('VPN Baslama Hatasi:', error.message);
       throw error;
     }
   }
 
   /**
-   * VPN'i Durdur
+   * VPN Durdur
    */
   async stop() {
-    this.statusMessage = 'Bağlantı kesiliyor...';
+    this.statusMessage = 'Baglanti kesiliyor...';
     try {
-      // Tüneli durdur ve servisi kaldır
-      await execAsync(`"${this.wgExe}" /uninstalltunnelservice warp`, { windowsHide: true });
-      
+      await execFileAsync(this.wgExe, ['/uninstalltunnelservice', 'warp'], { windowsHide: true, timeout: 10000 });
       this.isRunning = false;
       this.startTime = null;
-      this.statusMessage = 'Bağlantı Kesildi';
-      console.log('🛑 VPN Tüneli Kapatıldı.');
-      return { success: true, message: 'VPN bağlantısı kesildi.' };
+      this.statusMessage = 'Baglanti Kesildi';
+      console.log('VPN Tuneli Kapatildi.');
+      return { success: true, message: 'VPN baglantisi kesildi.' };
     } catch (error) {
-      // Zaten kapalıysa
       this.isRunning = false;
-      this.statusMessage = 'Bağlantı Kesildi';
-      return { success: true, message: 'VPN zaten kapalıydı.' };
+      this.statusMessage = 'Baglanti Kesildi';
+      return { success: true, message: 'VPN zaten kapali.' };
     }
   }
 
   /**
-   * Güncel durumu getir
+   * Durum
    */
   getStatus() {
-    const uptime = this.isRunning && this.startTime 
-      ? Math.floor((Date.now() - this.startTime) / 1000) 
+    const uptime = this.isRunning && this.startTime
+      ? Math.floor((Date.now() - this.startTime) / 1000)
       : 0;
-
     return {
       running: this.isRunning,
       statusMessage: this.statusMessage,
