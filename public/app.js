@@ -434,40 +434,92 @@ async function toggleBypass() {
 // ==========================================
 async function dnsTest() {
     const domain = el.testDomain.value.trim();
-    if (!domain) { showToast('Domain girin!', 'warning'); return; }
+    if (!domain) { showToast('Lütfen bir domain girin!', 'warning'); return; }
+
+    // Domain format kontrolü
+    const domainRegex = /^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
+    const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    if (!domainRegex.test(cleanDomain)) {
+        showToast('Geçersiz domain formatı! Örnek: discord.com', 'warning');
+        return;
+    }
 
     el.btnDnsTest.disabled = true;
     el.btnDnsTest.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
     el.dnsTestResult.className = 'dns-result';
     el.dnsTestResult.classList.remove('hidden', 'error');
-    el.dnsTestResult.textContent = 'Çözümleniyor...';
+    el.dnsTestResult.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:0.5rem"></i> Sorgulanıyor...';
+
+    const startTime = Date.now();
 
     try {
         const type = el.testType.value;
-        const res = await fetch(`${API}/api/dns/resolve?domain=${encodeURIComponent(domain)}&type=${type}`);
+        const res = await fetch(`${API}/api/dns/resolve?domain=${encodeURIComponent(cleanDomain)}&type=${type}`, {
+            signal: AbortSignal.timeout(8000)
+        });
         const data = await res.json();
+        const elapsed = Date.now() - startTime;
 
         if (data.error) {
             el.dnsTestResult.classList.add('error');
-            el.dnsTestResult.textContent = 'Hata: ' + data.error;
-        } else {
-            const ips = data.answers.map(a => a.address || a.type).filter(Boolean);
-            el.dnsTestResult.textContent = [
-                `Domain  : ${data.domain}`,
-                `Tip     : ${data.type}`,
-                `Sağlayıcı: ${data.provider}`,
-                `Süre    : ${data.responseTime} ms`,
-                `Yanıt   : ${ips.length > 0 ? ips.join(', ') : '(yanıt yok)'}`,
-            ].join('\n');
+            el.dnsTestResult.innerHTML = `
+                <span style="color:var(--danger)"><i class="fa-solid fa-circle-xmark"></i> Hata:</span>
+                <span style="margin-left:0.5rem">${data.error}</span>
+            `;
+            return;
         }
+
+        const answers = data.answers || [];
+        const ips = answers.filter(a => a.address).map(a => a.address);
+
+        if (ips.length === 0) {
+            el.dnsTestResult.classList.add('error');
+            el.dnsTestResult.innerHTML = `<i class="fa-solid fa-circle-question"></i> <strong>${cleanDomain}</strong> için kayıt bulunamadı.`;
+            return;
+        }
+
+        // IP badge'lerini oluştur
+        const ipBadges = ips.map(ip =>
+            `<span style="display:inline-block;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);
+            color:#a5b4fc;padding:0.15rem 0.5rem;border-radius:6px;font-family:monospace;font-size:0.85rem;margin:0.15rem 0.15rem 0 0">${ip}</span>`
+        ).join('');
+
+        const latencyColor = data.responseTime < 80 ? '#10b981' : data.responseTime < 200 ? '#f59e0b' : '#ef4444';
+
+        el.dnsTestResult.innerHTML = `
+            <div style="display:grid;gap:0.6rem">
+                <div style="display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:0.5rem;margin-bottom:0.2rem">
+                    <span style="color:var(--success);font-weight:600"><i class="fa-solid fa-circle-check"></i> Çözümleme Başarılı</span>
+                    <span style="color:${latencyColor};font-family:monospace;font-size:0.85rem"><i class="fa-solid fa-signal"></i> ${data.responseTime} ms</span>
+                </div>
+                <div style="display:grid;grid-template-columns:100px 1fr;gap:0.3rem;font-size:0.85rem">
+                    <span style="color:var(--text-muted)">Domain</span>
+                    <span style="font-family:monospace;color:var(--text-main)">${cleanDomain}</span>
+                    <span style="color:var(--text-muted)">Kayıt Tipi</span>
+                    <span style="color:var(--primary);font-weight:600">${data.type}</span>
+                    <span style="color:var(--text-muted)">Sağlayıcı</span>
+                    <span>${data.provider}</span>
+                    <span style="color:var(--text-muted)">TTL</span>
+                    <span style="font-family:monospace">${answers[0]?.ttl || '--'} sn</span>
+                    <span style="color:var(--text-muted);align-self:start;padding-top:0.2rem">IP Adresleri</span>
+                    <span>${ipBadges}</span>
+                </div>
+            </div>
+        `;
+
     } catch (e) {
         el.dnsTestResult.classList.add('error');
-        el.dnsTestResult.textContent = 'Sunucuya ulaşılamadı.';
+        if (e.name === 'TimeoutError') {
+            el.dnsTestResult.innerHTML = '<i class="fa-solid fa-clock"></i> Zaman aşımı — sunucu yanıt vermiyor.';
+        } else {
+            el.dnsTestResult.innerHTML = '<i class="fa-solid fa-plug-circle-xmark"></i> Sunucuya ulaşılamadı. <code style="font-size:0.8rem;opacity:0.7">npm start</code> çalışıyor mu?';
+        }
     } finally {
         el.btnDnsTest.disabled = false;
         el.btnDnsTest.innerHTML = '<i class="fa-solid fa-play"></i> Test Et';
     }
 }
+
 
 // ==========================================
 // LOG TABLE
